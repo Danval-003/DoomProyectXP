@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
 
 file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
@@ -23,13 +22,11 @@ target_include_directories(${PROJECT_NAME}
 
 find_package(SDL2 REQUIRED)
 include_directories(${SDL2_INCLUDE_DIRS})
-
-include_directories("/usr/include/fmod/")
-set(FMOD_LIBRARIES "/usr/lib/libfmod.so")
+find_package(TBB REQUIRED)
+target_link_libraries(${PROJECT_NAME} TBB::tbb)
 
 target_link_libraries(${PROJECT_NAME}
   ${SDL2_LIBRARIES}
   SDL2_image
-  ${FMOD_LIBRARIES}
   box2d
 )

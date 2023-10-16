@@ -18,9 +18,9 @@ void clear() {
 
 void draw_floor() {
   // floor color
-  SDL_SetRenderDrawColor(renderer, 112, 122, 122, 255);
+  SDL_SetRenderDrawColor(renderer, 122, 122, 122, 255);
   SDL_Rect rect = {
-    SCREEN_WIDTH, 
+    0,
     SCREEN_HEIGHT / 2,
     SCREEN_WIDTH,
     SCREEN_HEIGHT / 2
@@ -34,7 +34,7 @@ int main() {
   SDL_Init(SDL_INIT_VIDEO);
   ImageLoader::init();
 
-  window = SDL_CreateWindow("DOOM", 0, 0, SCREEN_WIDTH * 2, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+  window = SDL_CreateWindow("DOOM", 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
   renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
   ImageLoader::loadImage("+", "assets/wall3.png");
