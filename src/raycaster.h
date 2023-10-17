@@ -162,12 +162,12 @@ public:
         exit(1);
       }
       int x =i;
-      float h = static_cast<float>(SCREEN_HEIGHT)/static_cast<float>(d) * static_cast<float>(scale);
+      float h = static_cast<float>(SCREEN_HEIGHT)/static_cast<float>(d *cos(a-player.a) ) * static_cast<float>(scale);
       draw_stake(x, h, impact);
     }
 
-    int xD =(player.x-3*BLOCK/2 >0 )? player.x-3*BLOCK/2: 0;
-    int yD =(player.y-3*BLOCK/2 >0 )? player.y-3*BLOCK/2: 0;
+    int xD =player.x-3*BLOCK/2;
+    int yD =player.y-3*BLOCK/2;
     int sizeX = map[0].size();
     int sizeY = map.size();
 
