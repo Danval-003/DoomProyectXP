@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include "color.h"
 #include "imageloader.h"
+#include <thread>
 
 
 const Color B = {0, 0, 0};
@@ -28,7 +29,7 @@ struct Player {
   int y;
   float a;
   float fov;
-}; 
+};
 
 struct Impact {
   float d;
@@ -41,6 +42,7 @@ public:
   Raycaster(SDL_Renderer* renderer)
     : renderer(renderer) {
 
+
     player.x = BLOCK + BLOCK / 2;
     player.y = BLOCK + BLOCK / 2;
 
@@ -49,6 +51,8 @@ public:
 
     scale = 50;
     tsize = 128;
+    incertidumbreY = 0.0f;
+    incertidumbreX = 0.0f;
   }
 
   void load_map(const std::string& filename) {
@@ -96,7 +100,7 @@ public:
     while(true) {
       int x = static_cast<int>( player.x+ d * cos(a));
       int y = static_cast<int>(player.y + d * sin(a));
-      
+
       int i = static_cast<int>(x / BLOCK);
       int j = static_cast<int>(y / BLOCK);
 
@@ -124,46 +128,74 @@ public:
       }
 
 
-      
+
       d += 1;
     }
     return Impact{d, mapHit, tx};
   }
 
+  bool isWallCollision(float newX, float newY){
+    bool isWall = false;
+    if(newY> map.size() || newX>map[0].size()){
+      int y = static_cast<int>((newY+0.01 *BLOCK)/BLOCK);
+      int x = static_cast<int>((newX+0.01 *BLOCK)/BLOCK);
+
+      isWall = map[y][x]!=' ';
+
+      if(!isWall){
+        y = static_cast<int>((newY-0.01 *BLOCK)/BLOCK);
+        x = static_cast<int>((newX-0.01 *BLOCK)/BLOCK);
+
+        isWall= map[y][x] != ' ';
+      }
+
+    }
+
+    return isWall;
+  }
+
   void draw_stake(int x, float h, Impact i) {
-    float start = SCREEN_HEIGHT/2.0f - h/2.0f;
-    float end = start + h;
+    float start = SCREEN_HEIGHT/2.0f - h/2.0f ;
+    float end = start + h ;
 
     for (int y = start; y < end; y++) {
-      int ty = (y - start) * tsize / h;
-      Color c = ImageLoader::getPixelColor(i.mapHit, i.tx, ty);
-      SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
+        int ty = (y - start) * tsize / h;
+        Color c = ImageLoader::getPixelColor(i.mapHit, i.tx, ty);
 
-      SDL_RenderDrawPoint(renderer, x, y);
+        // Calcula el factor de atenuación basado en la distancia
+        float attenuationFactor = abs(15.0f / i.d); // Puedes ajustar este factor según tus preferencias
+
+        // Aplica la atenuación a los componentes de color
+        c.r = static_cast<int>(c.r * attenuationFactor);
+        c.g = static_cast<int>(c.g * attenuationFactor);
+        c.b = static_cast<int>(c.b * attenuationFactor);
+
+        SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
+        SDL_RenderDrawPoint(renderer, x+ 3* cos(incertidumbreX), y+ 3* cos(incertidumbreY));
     }
-  } 
- 
+  }
+
   void render() {
-    
-    // draw left side of the screen
-
-
 
     // draw right side of the screen
-    
-    for (int i = 1; i < SCREEN_WIDTH; i++) {
-      double a = player.a + player.fov / 2.0 - player.fov * i / SCREEN_WIDTH;
-      Impact impact = cast_ray(a);
-      float d = impact.d;
-      Color c = Color(255, 0, 0);
 
-      if (d == 0) {
-        print("you lose");
-        exit(1);
-      }
-      int x =i;
-      float h = static_cast<float>(SCREEN_HEIGHT)/static_cast<float>(d *cos(a-player.a) ) * static_cast<float>(scale);
-      draw_stake(x, h, impact);
+    for (int i = 1; i < SCREEN_WIDTH; i++) {
+        double a = player.a + player.fov / 2.0 - player.fov * i / SCREEN_WIDTH;
+        Impact impact = cast_ray(a);
+        float d = impact.d;
+        Color c = Color(255, 0, 0);
+
+        if (d == 0) {
+            print("you lose");
+            exit(1); // Considera manejar errores de manera más suave
+        }
+
+        int x = i;
+        double cos_a_minus_player_a = cos(a - player.a); // Evita cálculos redundantes
+        double inv_d_cos = 1.0 / (d * cos_a_minus_player_a); // Evita cálculos redundantes
+        float h = static_cast<float>(SCREEN_HEIGHT) * scale * inv_d_cos;
+
+        draw_stake(x, h, impact);
     }
 
     int xD =player.x-3*BLOCK/2;
@@ -203,6 +235,8 @@ public:
 
 
   Player player;
+  float incertidumbreY;
+  float incertidumbreX;
 private:
   int scale;
   SDL_Renderer* renderer;
