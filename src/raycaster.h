@@ -1,5 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
+#include <oneapi/tbb/concurrent_vector.h>
+#include <oneapi/tbb/parallel_for.h>
 #include <print.h>
 #include <iostream>
 #include <fstream>
@@ -12,10 +16,14 @@
 #include "color.h"
 #include "imageloader.h"
 #include <thread>
+#include <mutex>
+#include <tbb/tbb.h>
+#include <tbb/concurrent_vector.h>
 
 
 const Color B = {0, 0, 0};
 const Color W = {255, 255, 255};
+
 
 const int WIDTH = 16;
 const int HEIGHT = 11;
@@ -25,8 +33,8 @@ const int SCREEN_HEIGHT = HEIGHT * BLOCK;
 
 
 struct Player {
-  int x;
-  int y;
+  float x;
+  float y;
   float a;
   float fov;
 };
@@ -35,7 +43,15 @@ struct Impact {
   float d;
   std::string mapHit;  // + | -
   int tx;
+  float a;
 };
+
+struct Point {
+  float x;
+  float y;
+  Color c;
+};
+
 
 class Raycaster {
 public:
@@ -92,6 +108,49 @@ public:
     }
   }
 
+  void draw_ui(std::string playerImage, int width, int height) {
+    int size = 64;
+    ImageLoader::render(renderer, playerImage, SCREEN_WIDTH / 2.0f - width / 2.0f, SCREEN_HEIGHT - height);
+  }
+
+  Impact cast_ray2(int i) {
+    double a = player.a + player.fov / 2.0 - player.fov * i / SCREEN_WIDTH;
+    float d = 0;
+    std::string mapHit;
+    int tx;
+
+    while(true) {
+      int x = static_cast<int>( player.x+ d * cos(a));
+      int y = static_cast<int>(player.y + d * sin(a));
+
+      int i = static_cast<int>(x / BLOCK);
+      int j = static_cast<int>(y / BLOCK);
+
+
+      if (map[j][i] != ' ') {
+        mapHit = map[j][i];
+
+        int hitx = x - i * BLOCK;
+        int hity = y - j * BLOCK;
+        int maxhit;
+
+        if (hitx == 0 || hitx == BLOCK - 1) {
+          maxhit = hity;
+        } else {
+          maxhit = hitx;
+        }
+
+        tx = maxhit * tsize / BLOCK;
+
+        break;
+      }
+
+
+      d += 1;
+    }
+    return Impact{d, mapHit, tx, (float) a};
+  }
+
   Impact cast_ray(float a) {
     float d = 0;
     std::string mapHit;
@@ -131,7 +190,7 @@ public:
 
       d += 1;
     }
-    return Impact{d, mapHit, tx};
+    return Impact{d, mapHit, tx, a};
   }
 
   bool isWallCollision(float newX, float newY){
@@ -154,21 +213,35 @@ public:
     return isWall;
   }
 
-  void draw_stake(int x, float h, Impact i) {
+  void draw_stake(int x, float h, Impact i, float angleDiff) {
     float start = SCREEN_HEIGHT/2.0f - h/2.0f ;
     float end = start + h ;
+    const float limit = SCREEN_HEIGHT*0.20f;
+    const float limitx = 0.20f;
 
     for (int y = start; y < end; y++) {
         int ty = (y - start) * tsize / h;
         Color c = ImageLoader::getPixelColor(i.mapHit, i.tx, ty);
 
-        // Calcula el factor de atenuación basado en la distancia
-        float attenuationFactor = abs(15.0f / i.d); // Puedes ajustar este factor según tus preferencias
+        float xDiff = std::clamp(((limitx - angleDiff)/ limitx), 0.0f, 1.0f);
 
-        // Aplica la atenuación a los componentes de color
-        c.r = static_cast<int>(c.r * attenuationFactor);
-        c.g = static_cast<int>(c.g * attenuationFactor);
-        c.b = static_cast<int>(c.b * attenuationFactor);
+        float yDiif = std::clamp((limit - abs(SCREEN_HEIGHT/2 - (float) y))/limit, 0.0f, 1.0f);
+
+        float realDiff = yDiif *xDiff;
+
+        realDiff = (realDiff>0.80f)? 0.80f: realDiff;
+
+
+
+        // Calcula el factor de atenuación basado en la distancia
+        float attenuationFactor = std::min(abs(15.0f / i.d), 1.0f); // Puedes ajustar este factor según tus preferencias
+
+        // Aplica el efecto de la linterna atenuando el color
+        int lightIntensity = 255 * realDiff ; // Ajusta la intensidad de la linterna
+
+        c.r = static_cast<int>(c.r * lightIntensity / 255) + static_cast<int>(c.b * attenuationFactor);
+        c.g = static_cast<int>(c.g * lightIntensity / 255) + static_cast<int>(c.b * attenuationFactor);
+        c.b = static_cast<int>(c.b * lightIntensity / 255) + static_cast<int>(c.b * attenuationFactor);
 
         SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
         SDL_RenderDrawPoint(renderer, x+ 3* cos(incertidumbreX), y+ 3* cos(incertidumbreY));
@@ -177,25 +250,49 @@ public:
 
   void render() {
 
+    tbb::concurrent_vector<Impact> rays;
+    std::vector<Impact> rays2;
+    std::vector<Point> points2;
+    std::vector<std::thread> threadsRays;
+
+    for(int i=0; i<SCREEN_WIDTH; i++){
+      Impact h;
+      rays.push_back(h);
+    }
+
+    tbb::parallel_for(0, SCREEN_WIDTH, [this, &rays](int i){
+      rays[i] = cast_ray2(i);
+    });
+
     // draw right side of the screen
 
     for (int i = 1; i < SCREEN_WIDTH; i++) {
-        double a = player.a + player.fov / 2.0 - player.fov * i / SCREEN_WIDTH;
-        Impact impact = cast_ray(a);
+        Impact impact = rays[i];
         float d = impact.d;
         Color c = Color(255, 0, 0);
 
         if (d == 0) {
             print("you lose");
-            exit(1); // Considera manejar errores de manera más suave
+            exit(1);
         }
 
         int x = i;
-        double cos_a_minus_player_a = cos(a - player.a); // Evita cálculos redundantes
-        double inv_d_cos = 1.0 / (d * cos_a_minus_player_a); // Evita cálculos redundantes
+        double cos_a_minus_player_a = cos(impact.a - player.a);
+        double inv_d_cos = 1.0 / (d * cos_a_minus_player_a);
         float h = static_cast<float>(SCREEN_HEIGHT) * scale * inv_d_cos;
 
-        draw_stake(x, h, impact);
+        // Nuevo: Calcula el ángulo del rayo actual
+        double angle = player.a - player.fov / 2.0 + player.fov * i / SCREEN_WIDTH;
+
+        // Nuevo: Calcula la diferencia de ángulo entre la dirección del rayo y la linterna
+        double angleDiff = std::abs(angle - player.a);
+
+        // Nuevo: Define el ángulo máximo del cono de luz de la linterna (en radianes)
+        double maxLightAngle = 0.2; // Ajusta este valor según tu preferencia
+
+        // Nuevo: Verifica si el rayo está dentro del cono de luz
+
+        draw_stake(x, h, impact, angleDiff);
     }
 
     int xD =player.x-3*BLOCK/2;
@@ -237,7 +334,9 @@ public:
   Player player;
   float incertidumbreY;
   float incertidumbreX;
+  float incert_ang_x;
 private:
+  std::mutex sdlMutex;
   int scale;
   SDL_Renderer* renderer;
   std::vector<std::string> map;

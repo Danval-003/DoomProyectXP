@@ -8,6 +8,7 @@ set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
+
 file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
 )
@@ -21,6 +22,7 @@ target_include_directories(${PROJECT_NAME}
 )
 
 find_package(SDL2 REQUIRED)
+find_package(SDL2_mixer REQUIRED)
 include_directories(${SDL2_INCLUDE_DIRS})
 find_package(TBB REQUIRED)
 target_link_libraries(${PROJECT_NAME} TBB::tbb)
@@ -28,5 +30,6 @@ target_link_libraries(${PROJECT_NAME} TBB::tbb)
 target_link_libraries(${PROJECT_NAME}
   ${SDL2_LIBRARIES}
   SDL2_image
+  SDL2_mixer
   box2d
 )
